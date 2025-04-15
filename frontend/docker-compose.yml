@@ -1,0 +1,24 @@
+#Docker Networks
+networks:
+  epayco-network:
+    driver: bridge
+
+services:
+
+  # Application Service
+  node-frontend-epayco:
+    image: node:23-alpine
+    hostname: node-app-frontend
+    container_name: node-app-frontend
+    ports:
+      - ${PORT_EXT:-8081}:5173
+    working_dir: /opt/app
+    volumes:
+      - .:/opt/app:cached
+    command: >
+      sh -c '
+        npm install --quiet;
+        npm run dev -- --host 0.0.0.0;
+      '
+    networks:
+      - epayco-network

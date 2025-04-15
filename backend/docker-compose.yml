@@ -1,0 +1,99 @@
+#Docker Networks
+networks:
+  epayco-network:
+    driver: bridge
+
+volumes:
+  database-data-epayco:
+    driver: local
+
+services:
+
+  # MySQL database
+  database-epayco:
+    image: mysql:8.0
+    hostname: database-epayco
+    container_name: database-epayco
+    restart: always
+    tty: true
+    ports:
+      - ${DB_EXT_PORT:-3306}:3306
+    volumes:
+      - database-data-epayco:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-app}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent", "-p$${MYSQL_ROOT_PASSWORD:-root}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 0s
+    networks:
+      - epayco-network
+
+  # PHPMyAdmin
+  phpmyadmin-epayco:
+    image: phpmyadmin:5.2
+    hostname: phpmyadmin-epayco
+    container_name: phpmyadmin-epayco
+    restart: always
+    tty: true
+    depends_on:
+      database-epayco:
+        condition: service_healthy
+    ports:
+      - ${PMA_PORT:-8085}:80
+    environment:
+      PMA_HOST: ${DB_HOST:-database-epayco}
+      PMA_PORT: ${DB_PORT:-3306}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      UPLOAD_LIMIT: ${PMA_UPLOAD_LIMIT:-300M}
+      MEMORY_LIMIT: ${PMA_MEMORY_LIMIT:-512M}
+      PHP_UPLOAD_MAX_FILESIZE: ${PMA_PHP_UPLOAD_MAX_FILESIZE:-300M}
+      PHP_MAX_INPUT_VARS: ${PMA_PHP_MAX_INPUT_VARS:-1000}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 90s
+      timeout: 10s
+      retries: 5
+    links:
+      - database-epayco
+    networks:
+      - epayco-network
+
+  # Application Service
+  node-backend-epayco:
+    image: node:23-alpine
+    hostname: node-app-epayco
+    container_name: node-app-epayco
+    depends_on:
+      database-epayco:
+        condition: service_healthy
+    ports:
+      - ${PORT_API:-3333}:3333
+    working_dir: /opt/app
+    volumes:
+      - .:/opt/app:cached
+    environment:
+      TZ: UTC
+      PORT: 3333
+      HOST: ${DB_HOST:-0.0.0.0}
+      DB_HOST: ${DB_HOST:-database-epayco}
+      DB_PORT: ${DB_PORT:-3306}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DB_DATABASE: ${DB_DATABASE:-app}
+      DB_USER: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      NODE_ENV: development
+      APP_KEY: 5VlXNdb2CvkPF3uVzLG0_xCeMxY1O2U6
+    command: >
+      sh -c '
+        npm install --quiet;
+        node ace migration:run;
+        npm run dev;
+      '
+    links:
+      - database-epayco
+    networks:
+      - epayco-network
