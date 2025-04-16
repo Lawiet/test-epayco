@@ -43,7 +43,7 @@ export default class ActionsController {
     await mail.send((message) => {
       message
         .to(user.email)
-        .subject('Verify your email address')
+        .subject('Welcome')
         .html(`Welcome <b>${user.name.toUpperCase()} ${user.lastName.toUpperCase()}</b>!`)
     })
 
@@ -101,6 +101,9 @@ export default class ActionsController {
       .where('token', output.token)
       .where('session', output.sessionCode)
       .firstOrFail()
+    if (bill.success) {
+      return this.responseError('The bill is paid', 300)
+    }
     const wallet = await Wallet.findOrFail(bill.walletId)
     wallet.balance = wallet.balance + bill.amount
     bill.success = true
